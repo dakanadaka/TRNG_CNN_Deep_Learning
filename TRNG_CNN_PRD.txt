@@ -1,0 +1,60 @@
+
+Product Requirements Document (PRD)
+
+Project Title: TRNG CNN Quality Checker
+Objective: Use a 1D CNN to evaluate whether a stream of binary sequences (e.g., from a TRNG) shows recognizable patterns that distinguish it from purely random labels.
+
+---
+
+1. Functional Requirements
+
+| ID | Description |
+|----|-------------|
+| FR1 | Load binary sequences from TRNG or generate them randomly (simulated). |
+| FR2 | Preprocess data into fixed-length binary sequences (e.g., 16 bits per sample). |
+| FR3 | Create a PyTorch Dataset and DataLoader for these sequences. |
+| FR4 | Define a simple 1D CNN architecture for binary classification. |
+| FR5 | Train the CNN on these binary sequences with a binary label. |
+| FR6 | Output training loss per epoch. |
+| FR7 | Include a placeholder function to integrate real TRNG/PRNG sources. |
+
+---
+
+2. Non-Functional Requirements
+
+| ID | Description |
+|----|-------------|
+| NFR1 | Must be written in Python using PyTorch. |
+| NFR2 | Must be runnable on CPU (no GPU dependency). |
+| NFR3 | Code should be clear, commented, and modular. |
+| NFR4 | Training loop should finish in under 2 minutes on CPU with sample data. |
+| NFR5 | Should include simulated data generation as default if no TRNG is connected. |
+
+---
+
+3. Dataset Assumptions
+
+- Shape: Each sample is a 16-length binary array → shape [N, 16]
+- Label: Binary label (0 or 1); currently simulated
+- Future Extension: Replace generate_sample_data() with real TRNG vs PRNG sequences
+
+---
+
+4. Model Architecture
+
+| Layer | Description |
+|-------|-------------|
+| Conv1 | Conv1d(1, 16, kernel_size=3, padding=1) |
+| ReLU | Activation |
+| MaxPool | Kernel size 2 |
+| Conv2 | Conv1d(16, 32, kernel_size=3, padding=1) |
+| FC1 | Fully connected, output: 64 |
+| FC2 | Final output: 2 logits (binary classification) |
+
+---
+
+5. Success Criteria
+
+- Training loop runs without error.
+- Loss decreases across 10 epochs with simulated data.
+- Code is ready to plug in real TRNG vs PRNG input for testing.
