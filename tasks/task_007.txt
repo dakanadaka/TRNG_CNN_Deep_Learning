@@ -1,0 +1,11 @@
+# Task ID: 7
+# Title: Implement Training Loop
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: Train the CNN model on the binary sequences with a binary label and output training loss per epoch.
+# Details:
+
+
+# Test Strategy:
+

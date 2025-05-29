@@ -1,0 +1,11 @@
+# Task ID: 9
+# Title: Implement Command-Line Interface
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Develop a command-line interface for user interaction with clear logging.
+# Details:
+
+
+# Test Strategy:
+

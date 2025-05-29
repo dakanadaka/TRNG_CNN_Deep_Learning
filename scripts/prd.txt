@@ -1,0 +1,100 @@
+<context>
+# Overview  
+TRNG CNN Quality Checker is a tool designed to evaluate whether a stream of binary sequences (e.g., from a True Random Number Generator, TRNG) shows recognizable patterns that distinguish it from purely random labels. This helps in assessing the quality of TRNG outputs for cryptographic or scientific use.
+
+# Core Features  
+- Load binary sequences from TRNG or generate them randomly (simulated).
+- Preprocess data into fixed-length binary sequences (e.g., 16 bits per sample).
+- Create a PyTorch Dataset and DataLoader for these sequences.
+- Define a simple 1D CNN architecture for binary classification.
+- Train the CNN on these binary sequences with a binary label.
+- Output training loss per epoch.
+- Include a placeholder function to integrate real TRNG/PRNG sources.
+
+# User Experience  
+- User Persona: Data scientists, researchers, and engineers working with random number generators.
+- Key User Flows: Load/generate data, preprocess, train model, view results, integrate real TRNG.
+- UI/UX: Command-line interface with clear logging and modular code for easy extension.
+</context>
+<PRD>
+# Technical Architecture  
+- Written in Python using PyTorch.
+- Runnable on CPU (no GPU dependency).
+- Modular, clear, and well-commented code.
+- Training loop completes in under 2 minutes on CPU with sample data.
+- Simulated data generation as default if no TRNG is connected.
+- Dataset: Each sample is a 16-length binary array (shape [N, 16]), with a binary label (0 or 1).
+- Model Architecture:
+    - Conv1: Conv1d(1, 16, kernel_size=3, padding=1)
+    - ReLU activation
+    - MaxPool: kernel size 2
+    - Conv2: Conv1d(16, 32, kernel_size=3, padding=1)
+    - FC1: Fully connected, output: 64
+    - FC2: Final output: 2 logits (binary classification)
+
+# Development Roadmap  
+## MVP Requirements
+- Implement data loading and simulated data generation.
+- Preprocess data into fixed-length binary sequences.
+- Build PyTorch Dataset/DataLoader.
+- Implement 1D CNN model as specified.
+- Train model and output loss per epoch.
+- Placeholder for real TRNG/PRNG integration.
+
+## Future Enhancements
+- Integrate real TRNG/PRNG sources.
+- Expand model for more complex sequence analysis.
+- Add advanced evaluation metrics and visualization.
+
+# Logical Dependency Chain
+- Data loading and preprocessing must be implemented first.
+- Dataset/DataLoader setup follows preprocessing.
+- Model definition and training loop depend on data pipeline.
+- Integration of real TRNG/PRNG can be added after MVP.
+
+# Risks and Mitigations  
+- Technical: Ensuring model can distinguish subtle patterns; mitigated by modular design for easy tuning.
+- MVP Scope: Focus on simulated data first, with clear placeholder for real TRNG.
+- Resource: Ensure code runs efficiently on CPU; keep model simple and data small for MVP.
+
+# Appendix  
+## Functional Requirements
+| ID | Description |
+|----|-------------|
+| FR1 | Load binary sequences from TRNG or generate them randomly (simulated). |
+| FR2 | Preprocess data into fixed-length binary sequences (e.g., 16 bits per sample). |
+| FR3 | Create a PyTorch Dataset and DataLoader for these sequences. |
+| FR4 | Define a simple 1D CNN architecture for binary classification. |
+| FR5 | Train the CNN on these binary sequences with a binary label. |
+| FR6 | Output training loss per epoch. |
+| FR7 | Include a placeholder function to integrate real TRNG/PRNG sources. |
+
+## Non-Functional Requirements
+| ID | Description |
+|----|-------------|
+| NFR1 | Must be written in Python using PyTorch. |
+| NFR2 | Must be runnable on CPU (no GPU dependency). |
+| NFR3 | Code should be clear, commented, and modular. |
+| NFR4 | Training loop should finish in under 2 minutes on CPU with sample data. |
+| NFR5 | Should include simulated data generation as default if no TRNG is connected. |
+
+## Dataset Assumptions
+- Shape: Each sample is a 16-length binary array → shape [N, 16]
+- Label: Binary label (0 or 1); currently simulated
+- Future Extension: Replace generate_sample_data() with real TRNG vs PRNG sequences
+
+## Model Architecture
+| Layer | Description |
+|-------|-------------|
+| Conv1 | Conv1d(1, 16, kernel_size=3, padding=1) |
+| ReLU | Activation |
+| MaxPool | Kernel size 2 |
+| Conv2 | Conv1d(16, 32, kernel_size=3, padding=1) |
+| FC1 | Fully connected, output: 64 |
+| FC2 | Final output: 2 logits (binary classification) |
+
+## Success Criteria
+- Training loop runs without error.
+- Loss decreases across 10 epochs with simulated data.
+- Code is ready to plug in real TRNG vs PRNG input for testing.
+</PRD> 
