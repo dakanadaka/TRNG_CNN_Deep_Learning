@@ -1,42 +1,92 @@
-# TRNG CNN Quality Checker with Lottery Ticket Hypothesis
+# TRNG/PRNG CNN Quality Checker
 
-## 🎯 What is this project?
-This project implements a 1D Convolutional Neural Network (CNN) to evaluate the quality of binary random number sequences. The goal is to test whether a neural network can detect patterns in bitstreams that are *supposed* to be truly random — for example, from a True Random Number Generator (TRNG) or a Pseudo-Random Number Generator (PRNG).
+A command-line tool for training and evaluating a 1D Convolutional Neural Network (CNN) on binary sequences, such as those produced by True Random Number Generators (TRNGs) or Pseudo-Random Number Generators (PRNGs).
 
-This approach is inspired by the paper:
-> **"Assessing the Quality of Random Number Generators through Neural Networks"**  
-> [ResearchGate link](https://www.researchgate.net/publication/381370870_Assessing_the_quality_of_random_number_generators_through_neural_networks)
+## Why Use a 1D CNN for TRNG/PRNG Analysis?
+A 1D CNN is well-suited for detecting local patterns and dependencies in sequential data, such as bitstreams. By applying convolutional filters, the model can learn to recognize features that distinguish random from non-random sequences. This approach is more powerful than simple statistical tests, as it can learn subtle, complex patterns that may indicate non-randomness or bias in a generator.
 
-Their work demonstrated that CNNs could distinguish TRNG vs PRNG sources based on bitstream structures, meaning some RNGs leave detectable artifacts.
+## Features
+- Generate or load binary sequence data (from .txt files)
+- Train a CNN to classify sequences as PRNG or TRNG
+- Save/load models with timestamped filenames
+- Run inference on new data
+- Fully configurable via CLI arguments
+- Includes a comprehensive test suite
 
-This project simulates binary sequences (or imports real ones) and trains a CNN to classify them based on their origin.
+## Installation
+1. Clone the repository:
+   ```bash
+   git clone <repo-url>
+   cd TRNG_CNN_Deep_Learning
+   ```
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate  # On Windows
+   # or
+   source .venv/bin/activate  # On Linux/Mac
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Data Format
+- Data files must be plain text `.txt` files.
+- Each line is a binary sequence (e.g., `0101010101010101`), all lines must be the same length (default: 16 bits).
+- For PRNG data, files should be in `data/prng/`. For TRNG data, in `data/trng/`.
+
+## Usage
+### Generate PRNG Data
+Generate a file with random PRNG sequences:
+```bash
+python main.py --generate-prng data/prng/generated.txt --num-samples=1000 --seq-length=16
+```
+
+### Train a Model
+Train on PRNG or TRNG data from a `.txt` file:
+```bash
+python main.py --train=prng --datafile=data/prng/generated.txt
+python main.py --train=trng --datafile=data/trng/yourfile.txt
+```
+- Models are saved to the `pth/` directory with a timestamped filename.
+
+### Test a Model
+Run inference on PRNG or TRNG data using a saved model:
+```bash
+python main.py --test=prng --model=pth/prng_YYYYMMDD_HHMMSS.pth --datafile=data/prng/generated.txt
+python main.py --test=trng --model=pth/trng_YYYYMMDD_HHMMSS.pth --datafile=data/trng/yourfile.txt
+```
+- Predictions are printed to the console.
+
+### Customization
+- You can adjust `--epochs`, `--batch-size`, `--seq-length`, and `--num-samples` as needed.
+- The model architecture automatically adapts to the sequence length.
+
+## How It Works
+- **Data Preparation:** Binary sequences are loaded from `.txt` files or generated randomly. Each sequence is treated as a 1D array of bits.
+- **Model:** A 1D CNN processes each sequence, learning to classify it as PRNG or TRNG based on patterns in the bits.
+- **Training:** The model is trained using cross-entropy loss to distinguish between the two classes.
+- **Inference:** The trained model can be used to predict the class of new sequences.
+
+## Running Tests
+A comprehensive test suite is included. To run all tests:
+```bash
+pytest
+```
+This checks data loading, dataset, model, training, inference, and file generation.
+
+## Contributing
+Contributions are welcome! Please open issues or pull requests for improvements, bug fixes, or new features.
+
+## License
+MIT License. See `LICENSE` file for details.
+
+## Tips
+- Always match your `--seq-length` to the length of sequences in your data files.
+- All model files are saved in the `pth/` directory (which is git-ignored).
+- For real TRNG data, place your `.txt` files in `data/trng/`.
+- The code is fully documented for easy understanding and extension.
 
 ---
-
-## 🧠 Applying the Lottery Ticket Hypothesis (LTH)
-
-After successfully training the model, we apply the **Lottery Ticket Hypothesis (LTH)** to compress it.
-
-**LTH states:**
-> Within a large, randomly initialized network, there exists a smaller sub-network (a "winning ticket") that — when trained in isolation — can match the performance of the original network.
-
-### ✅ Steps applied:
-1. **Train the full CNN** on binary sequences.
-2. **Prune low-magnitude weights**, reducing model size.
-3. **Reinitialize the remaining weights** to their original values (from before training).
-4. **Retrain the pruned subnetwork**.
-
-This process reduces memory footprint and training time while preserving performance — making it ideal for embedded systems evaluating randomness in real-time.
-
-![LTH Pruning Diagram](./assets/images/lotery-ticket-hypothesis-trng.png)
-
----
-
-## 🚀 Future Work
-- Integrate live TRNG input from ESP32 or similar hardware
-- Add statistical randomness tests (e.g. entropy, chi-squared) alongside CNN prediction
-- Visualize pruning masks and learned filters
-
----
-
-MIT License © 2025 – For educational and experimental use
+For more details, see the docstrings in `main.py` or contact the project maintainer.
