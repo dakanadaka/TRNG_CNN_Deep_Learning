@@ -33,6 +33,8 @@ import argparse
 import sys
 import time
 import os
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 # -----------------------------
 # Dataset for binary sequences
@@ -244,11 +246,20 @@ def main():
     parser.add_argument('--seq-length', type=int, default=16, help='Sequence length')
     parser.add_argument('--datafile', type=str, help='Path to .txt file with binary sequences (required for trng/prng data)')
     parser.add_argument('--generate-prng', type=str, help='Generate PRNG .txt file at given path (e.g., data/prng/generated.txt)')
+    parser.add_argument('--split-data', nargs=3, metavar=('INPUT', 'TRAIN_OUT', 'TEST_OUT'), help='Split a .txt file into train/test sets: --split-data input.txt train.txt test.txt')
+    parser.add_argument('--test-size', type=float, default=0.3, help='Test set fraction for --split-data (default 0.3)')
+    parser.add_argument('--metrics', action='store_true', help='Print accuracy and confusion matrix after testing (requires true labels in datafile)')
     args = parser.parse_args()
 
     # Generate PRNG data and exit
     if args.generate_prng:
         generate_prng_txt(args.generate_prng, args.num_samples, args.seq_length)
+        sys.exit(0)
+
+    # Data splitting utility
+    if args.split_data:
+        input_file, train_file, test_file = args.split_data
+        split_txt_file(input_file, train_file, test_file, test_size=args.test_size, seq_length=args.seq_length)
         sys.exit(0)
 
     # Print usage if no action specified
@@ -315,6 +326,21 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
         loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
         preds = run_inference(model, loader)
         print(f"Predictions on {args.test.upper()} data:", preds)
+        # If --metrics is set, try to load true labels and print accuracy/confusion matrix
+        if args.metrics:
+            # Try to load true labels from the datafile (assume last column or separate file)
+            # For this example, assume the datafile is in the same format as used for training (labels known)
+            # If you want to use a separate label file, you can modify this logic
+            try:
+                # If the datafile is from PRNG, labels are 0; if from TRNG, labels are 1
+                true_label = 0 if args.test == 'prng' else 1
+                true_labels = np.full(len(preds), true_label, dtype=np.int64)
+                acc = accuracy_score(true_labels, preds)
+                cm = confusion_matrix(true_labels, preds)
+                print(f"Accuracy: {acc:.4f}")
+                print("Confusion Matrix:\n", cm)
+            except Exception as e:
+                print(f"Could not compute metrics: {e}")
 
 # -----------------------------
 # Data Generation for Simulated Data (if not using files)
@@ -331,6 +357,31 @@ def generate_sample_data(num_samples=1000, seq_length=16):
     data = np.random.randint(0, 2, (num_samples, seq_length))
     labels = np.random.randint(0, 2, num_samples)
     return data, labels
+
+def split_txt_file(input_file, train_file, test_file, test_size=0.3, seq_length=16, random_state=42):
+    """
+    Split a .txt file of binary sequences into train and test files.
+    Args:
+        input_file (str): Path to input .txt file.
+        train_file (str): Output path for train set.
+        test_file (str): Output path for test set.
+        test_size (float): Fraction of data to use for test set.
+        seq_length (int): Sequence length for validation.
+        random_state (int): Random seed for reproducibility.
+    """
+    # Load all sequences
+    data = load_sequences_from_txt(input_file, seq_length)
+    # For splitting, generate dummy labels (not used for actual training)
+    labels = np.zeros(len(data), dtype=np.int64)
+    X_train, X_test, _, _ = train_test_split(data, labels, test_size=test_size, random_state=random_state)
+    # Save train and test sets
+    with open(train_file, 'w') as f:
+        for seq in X_train:
+            f.write(''.join(str(int(bit)) for bit in seq) + '\n')
+    with open(test_file, 'w') as f:
+        for seq in X_test:
+            f.write(''.join(str(int(bit)) for bit in seq) + '\n')
+    print(f"Split {input_file} into {len(X_train)} train and {len(X_test)} test sequences.")
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,42 @@
 
 A command-line tool for training and evaluating a 1D Convolutional Neural Network (CNN) on binary sequences, such as those produced by True Random Number Generators (TRNGs) or Pseudo-Random Number Generators (PRNGs).
 
+## Step-by-Step Workflow
+
+### 1. Prepare Your Data
+- **Option A:** Generate PRNG data for testing:
+  ```bash
+  python main.py --generate-prng data/prng/generated.txt --num-samples=1000 --seq-length=16
+  ```
+- **Option B:** Collect or create your own `.txt` files for PRNG or TRNG sources. Each line should be a binary sequence (e.g., `0101010101010101`).
+
+### 2. Split Data into Train/Test Sets
+- Use the built-in splitter to create training and test sets:
+  ```bash
+  python main.py --split-data data/prng/generated.txt data/prng/train.txt data/prng/test.txt --test-size=0.3 --seq-length=16
+  ```
+- This will save two files: `train.txt` and `test.txt` with a 70/30 split by default.
+
+### 3. Train the Model
+- Train on your training set:
+  ```bash
+  python main.py --train=prng --datafile=data/prng/train.txt
+  ```
+- The trained model will be saved in the `pth/` directory with a timestamped filename.
+
+### 4. Test the Model and Evaluate
+- Run inference on your test set and print predictions:
+  ```bash
+  python main.py --test=prng --model=pth/prng_YYYYMMDD_HHMMSS.pth --datafile=data/prng/test.txt --metrics
+  ```
+- Add `--metrics` to print accuracy and a confusion matrix (assumes all test samples are of the same class).
+
+### 5. Interpret Results
+- **Accuracy**: Fraction of correct predictions (1.0 = perfect, 0.5 = random guessing for two classes).
+- **Confusion Matrix**: Shows true/false positives/negatives. For PRNG-only test data, you expect all predictions to be class 0.
+
+---
+
 ## Why Use a 1D CNN for TRNG/PRNG Analysis?
 A 1D CNN is well-suited for detecting local patterns and dependencies in sequential data, such as bitstreams. By applying convolutional filters, the model can learn to recognize features that distinguish random from non-random sequences. This approach is more powerful than simple statistical tests, as it can learn subtle, complex patterns that may indicate non-randomness or bias in a generator.
 

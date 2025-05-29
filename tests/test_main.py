@@ -7,8 +7,9 @@ import os
 import tempfile
 import pytest
 from main import (
-    load_sequences_from_txt, TRNGDataset, TRNGCNN, train_model, run_inference, generate_prng_txt
+    load_sequences_from_txt, TRNGDataset, TRNGCNN, train_model, run_inference, generate_prng_txt, split_txt_file
 )
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 def test_load_sequences_from_txt_valid(tmp_path):
     test_file = tmp_path / "test.txt"
@@ -70,4 +71,32 @@ def test_generate_prng_txt(tmp_path):
     assert len(lines) == 5
     for line in lines:
         assert set(line).issubset({'0', '1'})
-        assert len(line) == 8 
+        assert len(line) == 8
+
+# --- New tests for data splitting and metrics ---
+def test_split_txt_file(tmp_path):
+    # Create a file with 10 sequences
+    input_file = tmp_path / "all.txt"
+    seqs = ["0" * 16, "1" * 16] * 5
+    input_file.write_text("\n".join(seqs))
+    train_file = tmp_path / "train.txt"
+    test_file = tmp_path / "test.txt"
+    split_txt_file(str(input_file), str(train_file), str(test_file), test_size=0.3, seq_length=16)
+    train_lines = train_file.read_text().splitlines()
+    test_lines = test_file.read_text().splitlines()
+    assert len(train_lines) + len(test_lines) == 10
+    assert all(len(line) == 16 for line in train_lines + test_lines)
+    # Check that all lines are present (no duplicates or missing)
+    assert set(train_lines + test_lines) == set(seqs)
+
+def test_metrics_accuracy_confusion():
+    # Simulate predictions and true labels
+    preds = np.array([0, 0, 1, 1, 0, 1])
+    true_labels = np.array([0, 0, 1, 0, 1, 1])
+    acc = accuracy_score(true_labels, preds)
+    cm = confusion_matrix(true_labels, preds)
+    assert 0 <= acc <= 1
+    assert cm.shape == (2, 2)
+    # Check confusion matrix values
+    assert cm[0, 0] == 2  # True negatives
+    assert cm[1, 1] == 2  # True positives 
