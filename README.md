@@ -1,5 +1,9 @@
 # TRNG/PRNG CNN Quality Checker
 
+> **Based on:** [Assessing the quality of random number generators through neural networks](https://www.researchgate.net/publication/381370870_Assessing_the_quality_of_random_number_generators_through_neural_networks)
+>
+> This project is inspired by and implements the approach described in the above research paper, which demonstrates how neural networks (specifically 1D CNNs) can be used to assess the quality of random number generators by detecting patterns in bitstreams.
+
 A command-line tool for training and evaluating a 1D Convolutional Neural Network (CNN) on binary sequences, such as those produced by True Random Number Generators (TRNGs) or Pseudo-Random Number Generators (PRNGs).
 
 ## Step-by-Step Workflow
