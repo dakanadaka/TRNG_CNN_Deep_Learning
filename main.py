@@ -63,15 +63,22 @@ class TRNGDataset(Dataset):
     Returns:
         (torch.Tensor, torch.Tensor): Sequence and label for each sample.
     """
-    def __init__(self, data, labels):
+    def __init__(self, data, labels, loss_type='bce'):
         self.data = data.astype(np.float32)
-        self.labels = labels.astype(np.int64)
+        if loss_type == 'ce':
+            self.labels = labels.astype(np.int64)
+        else:
+            self.labels = labels.astype(np.float32)
+        self.loss_type = loss_type
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.data[idx]), torch.tensor(self.labels[idx])
+        if self.loss_type == 'ce':
+            return torch.tensor(self.data[idx]), torch.tensor(self.labels[idx], dtype=torch.long)
+        else:
+            return torch.tensor(self.data[idx]), torch.tensor(self.labels[idx], dtype=torch.float32)
 
 # -----------------------------
 # 1D CNN Model for Sequence Classification
@@ -84,7 +91,7 @@ class TRNGCNN(nn.Module):
     Args:
         seq_length (int): Length of the input sequences.
     """
-    def __init__(self, seq_length=16):
+    def __init__(self, seq_length=16, loss_type='bce'):
         super(TRNGCNN, self).__init__()
         self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
         self.relu = nn.ReLU()
@@ -100,7 +107,11 @@ class TRNGCNN(nn.Module):
             x = self.relu(x)
             flat_size = x.view(1, -1).shape[1]
         self.fc1 = nn.Linear(flat_size, 64)
-        self.fc2 = nn.Linear(64, 2)
+        if loss_type == 'ce':
+            self.fc2 = nn.Linear(64, 2)
+        else:
+            self.fc2 = nn.Linear(64, 1)
+        self.loss_type = loss_type
 
     def forward(self, x):
         """
@@ -108,7 +119,7 @@ class TRNGCNN(nn.Module):
         Args:
             x (torch.Tensor): Input tensor of shape (batch, 1, seq_length)
         Returns:
-            torch.Tensor: Output logits of shape (batch, 2)
+            torch.Tensor: Output logits of shape (batch, 1)
         """
         x = self.conv1(x)
         x = self.relu(x)
@@ -119,6 +130,22 @@ class TRNGCNN(nn.Module):
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
+        return x  # No sigmoid here; BCEWithLogitsLoss expects raw logits
+
+class SimpleLinearModel(nn.Module):
+    """
+    Simple linear model for debugging: one linear layer + ReLU, outputting a single logit.
+    """
+    def __init__(self, seq_length=16, loss_type='bce'):
+        super(SimpleLinearModel, self).__init__()
+        if loss_type == 'ce':
+            self.linear = nn.Linear(seq_length, 2)
+        else:
+            self.linear = nn.Linear(seq_length, 1)
+        self.loss_type = loss_type
+    def forward(self, x):
+        x = x.squeeze(1)
+        x = self.linear(x)
         return x
 
 # -----------------------------
@@ -183,32 +210,52 @@ def generate_trng_txt(filename, num_samples, seq_length):
 # -----------------------------
 # Training and Inference
 # -----------------------------
-def train_model(model, train_loader, criterion, optimizer, epochs=10):
+def train_model(model, train_loader, criterion, optimizer, epochs=10, device='cpu', overfit_test=False, loss_type='bce'):
     """
     Train the CNN model on the provided data.
     Args:
         model (nn.Module): The CNN model.
         train_loader (DataLoader): DataLoader for training data.
-        criterion: Loss function (e.g., nn.CrossEntropyLoss).
+        criterion: Loss function (e.g., nn.BCEWithLogitsLoss).
         optimizer: Optimizer (e.g., torch.optim.Adam).
         epochs (int): Number of training epochs.
+        overfit_test (bool): If True, only use the first 10 samples for overfit testing.
     Prints:
         Training loss per epoch.
     """
+    model.to(device)
     model.train()
     for epoch in range(epochs):
         total_loss = 0
-        for inputs, labels in train_loader:
-            inputs = inputs.unsqueeze(1)  # Add channel dimension
+        for batch_idx, (inputs, labels) in enumerate(train_loader):
+            inputs = inputs.unsqueeze(1).to(device)  # Add channel dimension and move to device
+            labels = labels.to(device)
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            if loss_type == 'bce':
+                outputs = outputs.squeeze(1)
+            if epoch == 0 and batch_idx == 0:
+                print("Sample inputs (first sequence):", inputs[0, 0].cpu().numpy())
+                print("Batch labels:", labels.cpu().numpy())
+                print("Unique labels in batch:", np.unique(labels.cpu().numpy()))
+                print("Batch outputs:", outputs.cpu().detach().numpy())
+                if loss_type == 'ce':
+                    print("Sample output (first):", outputs[0].cpu().detach().numpy())
+                else:
+                    print("Sample output (first):", outputs[0].cpu().item())
+            if loss_type == 'ce':
+                loss = criterion(outputs, labels)
+            else:
+                loss = criterion(outputs, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            if overfit_test:
+                # Only use the first batch per epoch
+                break
         print(f"Epoch {epoch+1}, Loss: {total_loss:.4f}")
 
-def run_inference(model, test_loader):
+def run_inference(model, test_loader, device='cpu', loss_type='bce'):
     """
     Run inference on a dataset using the trained model.
     Args:
@@ -217,13 +264,19 @@ def run_inference(model, test_loader):
     Returns:
         np.ndarray: Predicted class labels for each input sequence.
     """
+    model.to(device)
     model.eval()
     all_preds = []
     with torch.no_grad():
         for inputs, _ in test_loader:
-            inputs = inputs.unsqueeze(1)
+            inputs = inputs.unsqueeze(1).to(device)
             outputs = model(inputs)
-            preds = torch.argmax(outputs, dim=1)
+            if loss_type == 'ce':
+                preds = torch.argmax(outputs, dim=1)
+            else:
+                outputs = outputs.squeeze(1)
+                probs = torch.sigmoid(outputs)
+                preds = (probs > 0.5).long()
             all_preds.extend(preds.cpu().numpy())
     return np.array(all_preds)
 
@@ -290,6 +343,11 @@ def main():
     parser.add_argument('--prepare-binary-data', action='store_true', help='Prepare binary classification data from PRNG and TRNG files')
     parser.add_argument('--prngfile', type=str, help='Path to PRNG .txt file for binary data preparation')
     parser.add_argument('--trngfile', type=str, help='Path to TRNG .txt file for binary data preparation')
+    parser.add_argument('--overfit-test', action='store_true', help='Train on a small batch to test if the model can overfit')
+    parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate for optimizer (default: 0.001)')
+    parser.add_argument('--simple-model', action='store_true', help='Use a simple linear model for debugging')
+    parser.add_argument('--loss-type', type=str, choices=['bce', 'ce'], default='bce', help="Loss type: 'bce' for BCEWithLogitsLoss, 'ce' for CrossEntropyLoss")
+    parser.add_argument('--sgd', action='store_true', help='Use SGD optimizer instead of Adam')
     args = parser.parse_args()
 
     # Generate PRNG data and exit
@@ -342,6 +400,7 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
                         sys.exit(1)
                 else:
                     labels = np.zeros(len(data), dtype=np.int64) if args.train == 'prng' else np.ones(len(data), dtype=np.int64)
+                
             except Exception as e:
                 print(f"Error loading datafile: {e}")
                 sys.exit(1)
@@ -349,15 +408,24 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
         else:
             data, labels = generate_sample_data(args.num_samples, args.seq_length)
             prefix = 'prng'
-        dataset = TRNGDataset(data, labels)
+        dataset = TRNGDataset(data, labels, loss_type=args.loss_type)
         loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-        model = TRNGCNN(seq_length=args.seq_length)
-        criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        if args.simple_model:
+            model = SimpleLinearModel(seq_length=args.seq_length, loss_type=args.loss_type)
+        else:
+            model = TRNGCNN(seq_length=args.seq_length, loss_type=args.loss_type)
+        if args.loss_type == 'ce':
+            criterion = nn.CrossEntropyLoss()
+        else:
+            criterion = nn.BCEWithLogitsLoss()
+        if args.sgd:
+            optimizer = optim.SGD(model.parameters(), lr=args.learning_rate)
+        else:
+            optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
         device_manager = DeviceManager()
         device = device_manager.device
         print(f"Training on {device}")
-        train_model(model, loader, criterion, optimizer, epochs=args.epochs)
+        train_model(model, loader, criterion, optimizer, epochs=args.epochs, device=device, overfit_test=args.overfit_test, loss_type=args.loss_type)
         save_model(model, prefix)
 
     # Testing
@@ -381,9 +449,9 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
                 sys.exit(1)
         else:
             data, labels = generate_sample_data(args.num_samples, args.seq_length)
-        dataset = TRNGDataset(data, labels)
+        dataset = TRNGDataset(data, labels, loss_type=args.loss_type)
         loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
-        preds = run_inference(model, loader)
+        preds = run_inference(model, loader, device=device, loss_type=args.loss_type)
         print(f"Predictions on {args.test.upper()} data:", preds)
         # If --metrics is set, try to load true labels and print accuracy/confusion matrix
         if args.metrics:
