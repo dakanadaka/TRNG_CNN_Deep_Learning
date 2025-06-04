@@ -36,6 +36,21 @@ import os
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
 
+class DeviceManager:
+    """
+    Utility class to manage device selection (CUDA or CPU) for PyTorch.
+    Usage:
+        device_manager = DeviceManager()
+        device = device_manager.device
+    """
+    def __init__(self):
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+            print(f"Using device: CUDA ({torch.cuda.get_device_name(0)})")
+        else:
+            self.device = torch.device('cpu')
+            print("Using device: CPU")
+
 # -----------------------------
 # Dataset for binary sequences
 # -----------------------------
@@ -139,10 +154,31 @@ def generate_prng_txt(filename, num_samples, seq_length):
     """
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     with open(filename, 'w') as f:
-        for _ in range(num_samples):
+        for i in range(num_samples):
             seq = ''.join(str(np.random.randint(0, 2)) for _ in range(seq_length))
             f.write(seq + '\n')
+            if (i + 1) % 1_000_000 == 0:
+                percent = 100 * (i + 1) / num_samples
+                print(f"Generated {i + 1:,} / {num_samples:,} sequences... ({percent:.1f}%)", flush=True)
     print(f"Generated {num_samples} PRNG sequences in {filename}")
+
+def generate_trng_txt(filename, num_samples, seq_length):
+    """
+    Generate a .txt file with fake TRNG sequences (0s and 1s).
+    Args:
+        filename (str): Output file path.
+        num_samples (int): Number of sequences to generate.
+        seq_length (int): Length of each sequence.
+    """
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, 'w') as f:
+        for i in range(num_samples):
+            seq = ''.join(str(np.random.randint(0, 2)) for _ in range(seq_length))
+            f.write(seq + '\n')
+            if (i + 1) % 1_000_000 == 0:
+                percent = 100 * (i + 1) / num_samples
+                print(f"Generated {i + 1:,} / {num_samples:,} sequences... ({percent:.1f}%)", flush=True)
+    print(f"Generated {num_samples} TRNG sequences in {filename}", flush=True)
 
 # -----------------------------
 # Training and Inference
@@ -246,9 +282,14 @@ def main():
     parser.add_argument('--seq-length', type=int, default=16, help='Sequence length')
     parser.add_argument('--datafile', type=str, help='Path to .txt file with binary sequences (required for trng/prng data)')
     parser.add_argument('--generate-prng', type=str, help='Generate PRNG .txt file at given path (e.g., data/prng/generated.txt)')
+    parser.add_argument('--generate-trng', type=str, help='Generate TRNG .txt file at given path (e.g., data/trng/generated.txt)')
     parser.add_argument('--split-data', nargs=3, metavar=('INPUT', 'TRAIN_OUT', 'TEST_OUT'), help='Split a .txt file into train/test sets: --split-data input.txt train.txt test.txt')
     parser.add_argument('--test-size', type=float, default=0.3, help='Test set fraction for --split-data (default 0.3)')
     parser.add_argument('--metrics', action='store_true', help='Print accuracy and confusion matrix after testing (requires true labels in datafile)')
+    parser.add_argument('--labelsfile', type=str, help='Path to .txt file with labels (one per line, 0 or 1)')
+    parser.add_argument('--prepare-binary-data', action='store_true', help='Prepare binary classification data from PRNG and TRNG files')
+    parser.add_argument('--prngfile', type=str, help='Path to PRNG .txt file for binary data preparation')
+    parser.add_argument('--trngfile', type=str, help='Path to TRNG .txt file for binary data preparation')
     args = parser.parse_args()
 
     # Generate PRNG data and exit
@@ -256,10 +297,23 @@ def main():
         generate_prng_txt(args.generate_prng, args.num_samples, args.seq_length)
         sys.exit(0)
 
+    # Generate TRNG data and exit
+    if args.generate_trng:
+        generate_trng_txt(args.generate_trng, args.num_samples, args.seq_length)
+        sys.exit(0)
+
     # Data splitting utility
     if args.split_data:
         input_file, train_file, test_file = args.split_data
         split_txt_file(input_file, train_file, test_file, test_size=args.test_size, seq_length=args.seq_length)
+        sys.exit(0)
+
+    # Prepare binary classification data and exit
+    if args.prepare_binary_data:
+        if not args.prngfile or not args.trngfile:
+            print('Please provide --prngfile and --trngfile for binary data preparation.')
+            sys.exit(1)
+        prepare_binary_data(args.prngfile, args.trngfile, args.seq_length, test_size=args.test_size)
         sys.exit(0)
 
     # Print usage if no action specified
@@ -276,22 +330,18 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
         """)
         sys.exit(1)
 
-    # Datafile checks for PRNG/TRNG
-    if (args.train == 'trng' or args.test == 'trng'):
-        if not args.datafile or not args.datafile.startswith('data/trng/'):
-            print('For trng, you must provide --datafile=data/trng/yourfile.txt')
-            sys.exit(1)
-    if (args.train == 'prng' or args.test == 'prng'):
-        if not args.datafile or not args.datafile.startswith('data/prng/'):
-            print('For prng, you must provide --datafile=data/prng/yourfile.txt')
-            sys.exit(1)
-
     # Training
     if args.train:
         if args.datafile:
             try:
                 data = load_sequences_from_txt(args.datafile, args.seq_length)
-                labels = np.zeros(len(data), dtype=np.int64) if args.train == 'prng' else np.ones(len(data), dtype=np.int64)
+                if args.labelsfile:
+                    labels = np.loadtxt(args.labelsfile, dtype=np.int64)
+                    if len(labels) != len(data):
+                        print("Error: Number of labels does not match number of data samples.")
+                        sys.exit(1)
+                else:
+                    labels = np.zeros(len(data), dtype=np.int64) if args.train == 'prng' else np.ones(len(data), dtype=np.int64)
             except Exception as e:
                 print(f"Error loading datafile: {e}")
                 sys.exit(1)
@@ -304,6 +354,9 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
         model = TRNGCNN(seq_length=args.seq_length)
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=0.001)
+        device_manager = DeviceManager()
+        device = device_manager.device
+        print(f"Training on {device}")
         train_model(model, loader, criterion, optimizer, epochs=args.epochs)
         save_model(model, prefix)
 
@@ -316,7 +369,13 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
         if args.datafile:
             try:
                 data = load_sequences_from_txt(args.datafile, args.seq_length)
-                labels = np.zeros(len(data), dtype=np.int64) if args.test == 'prng' else np.ones(len(data), dtype=np.int64)
+                if args.labelsfile:
+                    labels = np.loadtxt(args.labelsfile, dtype=np.int64)
+                    if len(labels) != len(data):
+                        print("Error: Number of labels does not match number of data samples.")
+                        sys.exit(1)
+                else:
+                    labels = np.zeros(len(data), dtype=np.int64) if args.test == 'prng' else np.ones(len(data), dtype=np.int64)
             except Exception as e:
                 print(f"Error loading datafile: {e}")
                 sys.exit(1)
@@ -328,13 +387,12 @@ You can adjust --epochs, --batch-size, --seq-length as needed.
         print(f"Predictions on {args.test.upper()} data:", preds)
         # If --metrics is set, try to load true labels and print accuracy/confusion matrix
         if args.metrics:
-            # Try to load true labels from the datafile (assume last column or separate file)
-            # For this example, assume the datafile is in the same format as used for training (labels known)
-            # If you want to use a separate label file, you can modify this logic
             try:
-                # If the datafile is from PRNG, labels are 0; if from TRNG, labels are 1
-                true_label = 0 if args.test == 'prng' else 1
-                true_labels = np.full(len(preds), true_label, dtype=np.int64)
+                if args.labelsfile:
+                    true_labels = labels
+                else:
+                    true_label = 0 if args.test == 'prng' else 1
+                    true_labels = np.full(len(preds), true_label, dtype=np.int64)
                 acc = accuracy_score(true_labels, preds)
                 cm = confusion_matrix(true_labels, preds)
                 print(f"Accuracy: {acc:.4f}")
@@ -382,6 +440,63 @@ def split_txt_file(input_file, train_file, test_file, test_size=0.3, seq_length=
         for seq in X_test:
             f.write(''.join(str(int(bit)) for bit in seq) + '\n')
     print(f"Split {input_file} into {len(X_train)} train and {len(X_test)} test sequences.")
+
+def prepare_binary_data(prngfile, trngfile, seq_length, test_size=0.3):
+    """
+    Combine PRNG and TRNG .txt files, label, shuffle, and split into train/test sets for binary classification.
+    Args:
+        prngfile (str): Path to PRNG .txt file.
+        trngfile (str): Path to TRNG .txt file.
+        seq_length (int): Sequence length.
+        test_size (float): Fraction for test set.
+    Outputs:
+        data/binary/train.txt, data/binary/train_labels.txt, data/binary/test.txt, data/binary/test_labels.txt
+    """
+    import os
+    import numpy as np
+    from sklearn.model_selection import train_test_split
+    # Load PRNG
+    with open(prngfile, 'r') as f:
+        prng = [line.strip() for line in f if line.strip()]
+    prng_data = np.array([list(map(int, seq)) for seq in prng])
+    prng_labels = np.zeros(len(prng_data), dtype=np.int64)
+    # Load TRNG
+    with open(trngfile, 'r') as f:
+        trng = [line.strip() for line in f if line.strip()]
+    trng_data = np.array([list(map(int, seq)) for seq in trng])
+    trng_labels = np.ones(len(trng_data), dtype=np.int64)
+    # Combine and shuffle
+    data = np.vstack([prng_data, trng_data])
+    labels = np.concatenate([prng_labels, trng_labels])
+    indices = np.random.permutation(len(data))
+    data, labels = data[indices], labels[indices]
+    # Split
+    X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=test_size, random_state=42)
+    # Save to files
+    os.makedirs('data/binary', exist_ok=True)
+    np.savetxt('data/binary/train.txt', [''.join(map(str, row)) for row in X_train], fmt='%s')
+    np.savetxt('data/binary/test.txt', [''.join(map(str, row)) for row in X_test], fmt='%s')
+    np.savetxt('data/binary/train_labels.txt', y_train, fmt='%d')
+    np.savetxt('data/binary/test_labels.txt', y_test, fmt='%d')
+    print('Prepared binary classification data:')
+    print(f'  Train: {X_train.shape[0]} samples')
+    print(f'  Test:  {X_test.shape[0]} samples')
+
+# -----------------------------
+# Test for data format
+# -----------------------------
+def test_prepare_binary_data_format(train_file, test_file, seq_length):
+    """
+    Test that each line in the train and test files is a string of 0s and 1s of the correct length, with no spaces.
+    """
+    for file in [train_file, test_file]:
+        with open(file, 'r') as f:
+            for i, line in enumerate(f, 1):
+                line = line.strip()
+                assert len(line) == seq_length, f"Line {i} in {file} has length {len(line)}, expected {seq_length}"
+                assert set(line).issubset({'0', '1'}), f"Line {i} in {file} contains invalid characters: {line}"
+                assert ' ' not in line, f"Line {i} in {file} contains spaces: {line}"
+    print(f"Format test passed for {train_file} and {test_file}")
 
 if __name__ == "__main__":
     main()

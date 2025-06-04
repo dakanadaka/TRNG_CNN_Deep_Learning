@@ -4,43 +4,78 @@
 >
 > This project is inspired by and implements the approach described in the above research paper, which demonstrates how neural networks (specifically 1D CNNs) can be used to assess the quality of random number generators by detecting patterns in bitstreams.
 
-A command-line tool for training and evaluating a 1D Convolutional Neural Network (CNN) on binary sequences, such as those produced by True Random Number Generators (TRNGs) or Pseudo-Random Number Generators (PRNGs).
+This tool provides a command-line interface for training and evaluating a 1D Convolutional Neural Network (CNN) on binary sequences, such as those produced by True Random Number Generators (TRNGs) or Pseudo-Random Number Generators (PRNGs).
 
-## Step-by-Step Workflow
+## Features
+- Generate or load binary sequence data (from .txt files)
+- Train a CNN to classify sequences
+- Save/load models
+- Run inference on new data
+- Fully configurable via CLI arguments
+- Supports binary classification (PRNG vs TRNG) with custom label files
 
-### 1. Prepare Your Data
-- **Option A:** Generate PRNG data for testing:
-  ```bash
-  python main.py --generate-prng data/prng/generated.txt --num-samples=1000 --seq-length=16
-  ```
-- **Option B:** Collect or create your own `.txt` files for PRNG or TRNG sources. Each line should be a binary sequence (e.g., `0101010101010101`).
+## Usage Examples
 
-### 2. Split Data into Train/Test Sets
-- Use the built-in splitter to create training and test sets:
-  ```bash
-  python main.py --split-data data/prng/generated.txt data/prng/train.txt data/prng/test.txt --test-size=0.3 --seq-length=16
-  ```
-- This will save two files: `train.txt` and `test.txt` with a 70/30 split by default.
+### 1. Generate PRNG and TRNG Data
+Generate PRNG data:
+```bash
+python main.py --generate-prng data/prng/generated.txt --num-samples=1000000 --seq-length=16
+```
+Generate TRNG data (fake/random for testing):
+```bash
+python main.py --generate-trng data/trng/generated.txt --num-samples=1000000 --seq-length=16
+```
 
-### 3. Train the Model
-- Train on your training set:
-  ```bash
-  python main.py --train=prng --datafile=data/prng/train.txt
-  ```
-- The trained model will be saved in the `pth/` directory with a timestamped filename.
+### 2. Prepare Binary Classification Data
+Combine, label, shuffle, and split PRNG and TRNG data for binary classification:
+```bash
+python main.py --prepare-binary-data --prngfile=data/prng/generated.txt --trngfile=data/trng/generated.txt --seq-length=16
+```
+This creates:
+- `data/binary/train.txt`, `data/binary/train_labels.txt`
+- `data/binary/test.txt`, `data/binary/test_labels.txt`
 
-### 4. Test the Model and Evaluate
-- Run inference on your test set and print predictions:
-  ```bash
-  python main.py --test=prng --model=pth/prng_YYYYMMDD_HHMMSS.pth --datafile=data/prng/test.txt --metrics
-  ```
-- Add `--metrics` to print accuracy and a confusion matrix (assumes all test samples are of the same class).
+### 3. Train the Model (Binary Classification)
+Train on the combined and labeled data:
+```bash
+python main.py --train=prng --datafile=data/binary/train.txt --labelsfile=data/binary/train_labels.txt --epochs=10 --batch-size=1024 --seq-length=16
+```
 
-### 5. Interpret Results
-- **Accuracy**: Fraction of correct predictions (1.0 = perfect, 0.5 = random guessing for two classes).
-- **Confusion Matrix**: Shows true/false positives/negatives. For PRNG-only test data, you expect all predictions to be class 0.
+### 4. Test the Model
+Test the trained model and print accuracy/confusion matrix:
+```bash
+python main.py --test=prng --model=pth/yourmodel.pth --datafile=data/binary/test.txt --labelsfile=data/binary/test_labels.txt --metrics --seq-length=16
+```
+Replace `yourmodel.pth` with the actual model filename saved during training.
+
+### 5. Device Selection
+The script will automatically use a GPU (CUDA) if available, otherwise it will use the CPU. The device in use is printed at startup.
 
 ---
+
+## Additional CLI Options
+- `--split-data input.txt train.txt test.txt` : Split a .txt file into train/test sets
+- `--test-size 0.3` : Fraction of data to use for test set (default 0.3)
+- `--epochs`, `--batch-size`, `--seq-length` : Control training parameters
+
+---
+
+## Notes
+- All data files must contain one binary sequence per line (e.g., `0101010101010101`).
+- For binary classification, always use the `--labelsfile` option to provide correct labels.
+- For custom data, ensure PRNG and TRNG files have the same sequence length.
+
+---
+
+## Example Workflow
+1. Generate PRNG and TRNG data
+2. Prepare binary classification data
+3. Train the model
+4. Test the model and review metrics
+
+---
+
+For more details, see comments in `main.py` or run `python main.py` for help.
 
 ## Why Use a 1D CNN for TRNG/PRNG Analysis?
 A 1D CNN is well-suited for detecting local patterns and dependencies in sequential data, such as bitstreams. By applying convolutional filters, the model can learn to recognize features that distinguish random from non-random sequences. This approach is more powerful than simple statistical tests, as it can learn subtle, complex patterns that may indicate non-randomness or bias in a generator.
